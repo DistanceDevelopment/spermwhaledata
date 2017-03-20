@@ -78,5 +78,7 @@ spdf <- SpatialPointsDataFrame(coords, predgrid)
 
 writeOGR(spdf, "predgrid.shp", "data", "ESRI Shapefile" )
 
-
+# as csv too
+predgrid <- as.data.frame(spdf)
+write.csv(predgrid, file="predgrid.csv")
 
