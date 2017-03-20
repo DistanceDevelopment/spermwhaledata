@@ -2,6 +2,7 @@
 # compatible format
 
 # David L Miller 2017
+#   bugs added by Rexstad
 
 library(rgdal)
 
@@ -21,7 +22,7 @@ segs$Sample.Label <- segs$SegmentID
 # get rid of nuisance columns
 segs$Length <- segs$coords.x1 <- segs$coords.x2 <-
   segs$POINT_X <- segs$POINT_Y <- NULL
-write.csv(segs, file="segments.csv")
+write.csv(segs, file="segments.csv", row.names=FALSE)
 
 # segments as shapefile
 segs_shp <- readOGR(paste0(base_path, "Analysis.gdb"),"Segments")
@@ -41,10 +42,10 @@ obs$size <- obs$GroupSize
 
 # get rid of nuisance columns
 obs$Distance <- obs$SightingID <- obs$SegmentID <- obs$GroupSize  <- segs$coords.x1 <- segs$coords.x2 <- NULL
-write.csv(obs, file="obs.csv")
+write.csv(obs, file="obs.csv", row.names=FALSE)
 
 # distance data
-write.csv(obs, file="dist.csv")
+write.csv(obs, file="dist.csv", row.names=FALSE)
 
 ## study area
 study_area <- readOGR(paste0(base_path, "Analysis.gdb"), "Study_Area")
@@ -80,5 +81,5 @@ writeOGR(spdf, "predgrid.shp", "data", "ESRI Shapefile" )
 
 # as csv too
 predgrid <- as.data.frame(spdf)
-write.csv(predgrid, file="predgrid.csv")
+write.csv(predgrid, file="predgrid.csv", row.names=FALSE)
 
