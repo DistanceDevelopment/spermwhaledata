@@ -30,6 +30,13 @@ segs_shp <- readOGR(paste0(base_path, "Analysis.gdb"),"Segments")
 writeOGR(segs_shp, "segments.shp", "data", "ESRI Shapefile" )
 
 
+## transects
+transects <- readOGR(paste0(base_path, "Analysis.gdb"), "Tracklines")
+writeOGR(transects, "transects.shp", "data", "ESRI Shapefile" )
+
+transects2 <- readOGR(paste0(base_path, "Analysis.gdb"), "Tracklines2")
+
+
 ## observation and distance data
 
 # obs table
@@ -39,6 +46,7 @@ obs$distance <- obs$Distance
 obs$object <- obs$SightingID
 obs$Sample.Label <- obs$SegmentID
 obs$size <- obs$GroupSize
+obs$observer <- obs$detected <- 1
 
 # get rid of nuisance columns
 obs$Distance <- obs$SightingID <- obs$SegmentID <- obs$GroupSize  <- segs$coords.x1 <- segs$coords.x2 <- NULL
@@ -80,6 +88,7 @@ spdf <- SpatialPointsDataFrame(coords, predgrid)
 writeOGR(spdf, "predgrid.shp", "data", "ESRI Shapefile" )
 
 # as csv too
-predgrid <- as.data.frame(spdf)
-write.csv(predgrid, file="predgrid.csv", row.names=FALSE)
+predgrid <- round(as.data.frame(spdf@data),4)
+predgrid$LinkID <- seq(from=1, to=dim(spdf@data)[1])
+write.csv(predgrid, file="predgrid.csv", row.names=FALSE, quote = FALSE)
 
