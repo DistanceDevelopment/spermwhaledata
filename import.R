@@ -1,5 +1,5 @@
-# importer for the GIS files from Jason Roberts into Distance
-# compatible format
+# importer for the GIS files from Jason Roberts into Distance and R
+# compatible formats
 
 # David L Miller 2017
 #   bugs added by Rexstad
@@ -7,7 +7,9 @@
 library(rgdal)
 
 # base path
-base_path <- "../rawdata/"
+base_path <- "rawdata/"
+# export path
+export_path <- "distance_import/"
 
 ## line transects/effort table
 
@@ -22,19 +24,19 @@ segs$Sample.Label <- segs$SegmentID
 # get rid of nuisance columns
 segs$Length <- segs$coords.x1 <- segs$coords.x2 <-
   segs$POINT_X <- segs$POINT_Y <- NULL
-write.csv(segs, file="segments.csv", row.names=FALSE)
+write.csv(segs, file=paste0(export_path, "segments.csv"), row.names=FALSE)
 
 # segments as shapefile
 segs_shp <- readOGR(paste0(base_path, "Analysis.gdb"),"Segments")
 # this should be all we need...
-writeOGR(segs_shp, "segments.shp", "data", "ESRI Shapefile" )
+writeOGR(segs_shp, paste0(export_path, "segments.shp"), "data",
+         "ESRI Shapefile" )
 
 
 ## transects
 transects <- readOGR(paste0(base_path, "Analysis.gdb"), "Tracklines")
-writeOGR(transects, "transects.shp", "data", "ESRI Shapefile" )
-
-transects2 <- readOGR(paste0(base_path, "Analysis.gdb"), "Tracklines2")
+writeOGR(transects, paste0(export_path, "transects.shp"),
+         "data", "ESRI Shapefile" )
 
 
 ## observation and distance data
@@ -49,15 +51,16 @@ obs$size <- obs$GroupSize
 obs$observer <- obs$detected <- 1
 
 # get rid of nuisance columns
-obs$Distance <- obs$SightingID <- obs$SegmentID <- obs$GroupSize  <- segs$coords.x1 <- segs$coords.x2 <- NULL
-write.csv(obs, file="obs.csv", row.names=FALSE)
+obs$Distance <- obs$SightingID <- obs$SegmentID <- obs$GroupSize <- segs$coords.x1 <- segs$coords.x2 <- NULL
+write.csv(obs, file=paste0(export_path, "obs.csv"), row.names=FALSE)
 
 # distance data
-write.csv(obs, file="dist.csv", row.names=FALSE)
+write.csv(obs, file=paste0(export_path, "dist.csv"), row.names=FALSE)
 
 ## study area
 study_area <- readOGR(paste0(base_path, "Analysis.gdb"), "Study_Area")
-writeOGR(study_area, "studyarea.shp", "data", "ESRI Shapefile" )
+writeOGR(study_area, paste0(export_path, "studyarea.shp"),
+         "data", "ESRI Shapefile")
 
 
 ## prediction grid
@@ -85,10 +88,15 @@ sp <- SpatialPoints(coords)
 # make spatial data frame
 spdf <- SpatialPointsDataFrame(coords, predgrid)
 
-writeOGR(spdf, "predgrid.shp", "data", "ESRI Shapefile" )
+writeOGR(spdf, paste0(export_path, "predgrid.shp"), "data", "ESRI Shapefile" )
 
 # as csv too
 predgrid <- round(as.data.frame(spdf@data),4)
 predgrid$LinkID <- seq(from=1, to=dim(spdf@data)[1])
-write.csv(predgrid, file="predgrid.csv", row.names=FALSE, quote = FALSE)
+write.csv(predgrid, file=paste0(export_path, "predgrid.csv"),
+          row.names=FALSE, quote = FALSE)
+
+# now save some things for R
+dist <- obs
+save(segs, obs, dist, study_area, predgrid, file="R_import/spermwhale.RData")
 
