@@ -24,7 +24,6 @@ segs$Sample.Label <- segs$SegmentID
 # get rid of nuisance columns
 segs$Length <- segs$coords.x1 <- segs$coords.x2 <-
   segs$POINT_X <- segs$POINT_Y <- NULL
-write.csv(segs, file=paste0(export_path, "segments.csv"), row.names=FALSE)
 
 # segments as shapefile
 segs_shp <- readOGR(paste0(base_path, "Analysis.gdb"),"Segments")
@@ -32,6 +31,13 @@ segs_shp <- readOGR(paste0(base_path, "Analysis.gdb"),"Segments")
 writeOGR(segs_shp, paste0(export_path, "segments.shp"), "data",
          "ESRI Shapefile" )
 
+# add in the survey ID from the shapefile
+dd <- unique(segs_shp@data[,c("SegmentID", "FIRST_Survey")])
+names(dd) <- c("Sample.Label", "Survey")
+segs <- merge(segs, dd, by="Sample.Label")
+
+# write the csv
+write.csv(segs, file=paste0(export_path, "segments.csv"), row.names=FALSE)
 
 ## transects
 transects <- readOGR(paste0(base_path, "Analysis.gdb"), "Tracklines")
