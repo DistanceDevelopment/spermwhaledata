@@ -122,9 +122,10 @@ obs$object <- obs$SightingID
 obs$Sample.Label <- obs$SegmentID
 obs$size <- obs$GroupSize
 obs$observer <- obs$detected <- 1
+obs$Beaufort <- obs$SeaState
 
 # get rid of nuisance columns
-obs$Distance <- obs$SightingID <- obs$SegmentID <- obs$GroupSize <- NULL
+obs$Distance <- obs$SightingID <- obs$SegmentID <- obs$GroupSize <- obs$SeaState<- NULL
 write.csv(obs, file=paste0(export_path, "obs.csv"), row.names=FALSE)
 
 # distance data
