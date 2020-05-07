@@ -1,23 +1,24 @@
-# importer for the GIS files from Jason Roberts into Distance and R
-# compatible formats
+# import sperm whale data into R
 
-# David L Miller 2017
-#   bugs added by Rexstad
+# Data from NOAA North East and South East Fisheries Science Centers
 
-library(rgdal)
+# re-write with sf/stars May 2020
+
+library(sf)
+library(stars)
 library(lubridate)
 options(stringsAsFactors = FALSE)
 
-# base path
-base_path <- "rawdata/"
+# path to geodatabase
+gdb_path <- "rawdata/Analysis.gdb"
 # export path
 export_path <- "distance_import/"
 
 ## line transects/effort table
 
 # effort data as csv
-segs <- readOGR(paste0(base_path, "Analysis.gdb"),"Segment_Centroids")
-segs <- as.data.frame(segs)
+segs <- read_sf(gdb_path, "Segment_Centroids")
+segs <- st_drop_geometry(segs)
 segs$x <- segs$POINT_X
 segs$y <- segs$POINT_Y
 segs$Effort <- segs$Length
@@ -28,20 +29,23 @@ segs$CenterTime <- ymd_hms(segs$CenterTime)
 segs$Length <- segs$coords.x1 <- segs$coords.x2 <-
   segs$POINT_X <- segs$POINT_Y <- NULL
 
-# segments as shapefile
-segs_shp <- readOGR(paste0(base_path, "Analysis.gdb"),"Segments")
-# this should be all we need...
-writeOGR(segs_shp, paste0(export_path, "segments.shp"), "data",
-         "ESRI Shapefile" )
 
-# add in the survey ID from the shapefile
-dd <- unique(segs_shp@data[,c("SegmentID", "FIRST_Survey")])
+# also save segments as shapefile
+segs_shp <- read_sf(gdb_path, "Segments")
+# this should be all we need...
+write_sf(segs_shp, dsn=paste0(export_path, "segments.shp"),
+         driver="ESRI Shapefile" )
+
+# add the survey ID from the shapefile to segs
+dd <- unique(st_drop_geometry(segs_shp)[,c("SegmentID", "FIRST_Survey")])
 names(dd) <- c("Sample.Label", "Survey")
 segs <- merge(segs, dd, by="Sample.Label")
 
-# add in the Beaufort
 
-endat <- as.data.frame(readOGR(paste0(base_path, "Analysis.gdb"),"EN_Trackline2"))
+
+
+## add in the Beaufort to the segments
+endat <- as.data.frame(read_sf(gdb_path, "EN_Trackline2"))
 # make a time window
 endat$en04_effort_csv_begdatetime <- ymd_hms(endat$en04_effort_csv_begdatetime)
 endat$en04_effort_csv_enddatetime <- ymd_hms(endat$en04_effort_csv_enddatetime)
@@ -70,8 +74,8 @@ napred <- approx(as.numeric(segsEN$CenterTime)[!naind], segsEN$Beaufort[!naind],
 #plot(segsEN$CenterTime[!naind], segsEN$Beaufort[!naind], pch=19)
 #points(as.numeric(segsEN$CenterTime)[naind], napred$y, pch=21)
 
-#now for GU
-gudat <- as.data.frame(readOGR(paste0(base_path, "Analysis.gdb"),"GU_Trackline2"))
+# now do the same for the GU segments
+gudat <- as.data.frame(read_sf(gdb_path, "GU_Trackline2"))
 # make a time window
 gudat$DateTime1 <- ymd_hms(gudat$DateTime1)
 gudat$DateTime2 <- ymd_hms(gudat$DateTime2)
@@ -107,16 +111,16 @@ segs <- rbind(segsEN, segsGU)
 write.csv(segs, file=paste0(export_path, "segments.csv"), row.names=FALSE)
 
 ## transects
-transects <- readOGR(paste0(base_path, "Analysis.gdb"), "Tracklines")
-writeOGR(transects, paste0(export_path, "transects.shp"),
-         "data", "ESRI Shapefile" )
+transects <- read_sf(gdb_path, "Tracklines")
+write_sf(transects, dsn=paste0(export_path, "transects.shp"),
+         driver="ESRI Shapefile" )
 
 
 ## observation and distance data
 
 # obs table
-obs <- readOGR(paste0(base_path, "Analysis.gdb"), "Sightings")
-obs <- as.data.frame(obs)
+obs <- read_sf(gdb_path, "Sightings")
+obs <- st_drop_geometry(obs)
 obs$distance <- obs$Distance
 obs$object <- obs$SightingID
 obs$Sample.Label <- obs$SegmentID
@@ -125,50 +129,59 @@ obs$observer <- obs$detected <- 1
 obs$Beaufort <- obs$SeaState
 
 # get rid of nuisance columns
-obs$Distance <- obs$SightingID <- obs$SegmentID <- obs$GroupSize <- obs$SeaState<- NULL
+obs$Distance <- obs$SightingID <- obs$SegmentID <- obs$GroupSize <- obs$SeaState <- NULL
 write.csv(obs, file=paste0(export_path, "obs.csv"), row.names=FALSE)
 
 # distance data
 write.csv(obs, file=paste0(export_path, "dist.csv"), row.names=FALSE)
 
 ## study area
-study_area <- readOGR(paste0(base_path, "Analysis.gdb"), "Study_Area")
-writeOGR(study_area, paste0(export_path, "studyarea.shp"),
-         "data", "ESRI Shapefile")
+study_area <- read_sf(gdb_path, "Study_Area")
+write_sf(study_area, dsn=paste0(export_path, "studyarea.shp"),
+         driver="ESRI Shapefile")
 
 
 ## prediction grid
-# from the Distance manual this requires a **point** not polygon set
-library(raster)
 
-# build a predictor stack
-predictorStack <- stack(paste0(base_path,
-                        c("Covariates_for_Study_Area/Depth.img",
-                          "Covariates_for_Study_Area/GLOB/CMC/CMC0.2deg/analysed_sst/2004/20040624-CMC-L4SSTfnd-GLOB-v02-fv02.0-CMC0.2deg-analysed_sst.img",
-                          "Covariates_for_Study_Area/VGPM/Rasters/vgpm.2004153.hdf.gz.img",
-                          "Covariates_for_Study_Area/DistToCanyonsAndSeamounts.img",
-                          "Covariates_for_Study_Area/Global/DT\ all\ sat/MSLA_ke/2004/MSLA_ke_2004176.img"
-                          )))
-# rename the layers in our stack to match those in the model 
+# list of files to load
+raster_files <- paste0("rawdata/",
+                       c("Covariates_for_Study_Area/Depth.img",
+                         "Covariates_for_Study_Area/GLOB/CMC/CMC0.2deg/analysed_sst/2004/20040624-CMC-L4SSTfnd-GLOB-v02-fv02.0-CMC0.2deg-analysed_sst.img",
+                         "Covariates_for_Study_Area/VGPM/Rasters/vgpm.2004153.hdf.gz.img",
+                         "Covariates_for_Study_Area/DistToCanyonsAndSeamounts.img",
+                         "Covariates_for_Study_Area/Global/DT\ all\ sat/MSLA_ke/2004/MSLA_ke_2004176.img"
+                       ))
+
+# read all into one object
+predictorStack <- read_stars(raster_files)
+
+# rename the layers in our stack to match those in the model
 names(predictorStack) <- c("Depth","SST","NPP", "DistToCAS", "EKE")
 
+# coerce to data.frame
 predgrid <- as.data.frame(predictorStack, xy=TRUE)
+# size of grid cells
 predgrid$off.set <- (10*1000)^2
 
-predgrid <- predgrid[!is.na(predgrid$Depth),]
 
-coords <- cbind(predgrid$x, predgrid$y)
-sp <- SpatialPoints(coords)
-# make spatial data frame
-spdf <- SpatialPointsDataFrame(coords, predgrid)
 
-writeOGR(spdf, paste0(export_path, "predgrid.shp"), "data", "ESRI Shapefile" )
+# now create a shapefile for distance
+# from the Distance manual this requires a set of points not polygons
+pred_shp <- st_cast(st_as_sf(predictorStack), "POINT")
+write_sf(pred_shp, dsn=paste0(export_path, "predgrid.shp"),
+         driver="ESRI Shapefile" )
 
 # as csv too
-predgrid <- round(as.data.frame(spdf@data),4)
-predgrid$LinkID <- seq(from=1, to=dim(spdf@data)[1])
+predgrid_csv <- predgrid
+predgrid_csv$LinkID <- seq(from=1, to=nrow(predgrid_csv))
 write.csv(predgrid, file=paste0(export_path, "predgrid.csv"),
           row.names=FALSE, quote = FALSE)
+
+
+# raster is rectangular, prediction grid is not
+# so remove the NA values were we won't predict
+predgrid <- predgrid[!is.na(predgrid$Depth), ]
+
 
 # now save some things for R
 dist <- obs
