@@ -16,8 +16,16 @@ export_path <- "distance_import/"
 
 ## line transects/effort table
 
-# effort data as csv
 segs <- read_sf(gdb_path, "Segment_Centroids")
+# keep lat and long for plotting
+segs_latlong <- st_coordinates(st_transform(segs, crs=4326))
+names(segs_latlong) <- c("long", "lat")
+
+# save the proj4string
+proj <- st_crs(segs)$proj4string
+writeLines(proj, "spermwhale.proj4")
+
+# process to data.frame
 segs <- st_drop_geometry(segs)
 segs$x <- segs$POINT_X
 segs$y <- segs$POINT_Y
@@ -29,6 +37,8 @@ segs$CenterTime <- ymd_hms(segs$CenterTime)
 segs$Length <- segs$coords.x1 <- segs$coords.x2 <-
   segs$POINT_X <- segs$POINT_Y <- NULL
 
+# add lat/long back in
+segs <- cbind(segs, segs_latlong)
 
 # also save segments as shapefile
 segs_shp <- read_sf(gdb_path, "Segments")
@@ -67,12 +77,15 @@ for(j in 1:nrow(segsEN)){
 
 # some were missing, interpolate
 naind <- is.na(segsEN$Beaufort)
-napred <- approx(as.numeric(segsEN$CenterTime)[!naind], segsEN$Beaufort[!naind],
-                 as.numeric(segsEN$CenterTime)[naind])
+napred <- approx(as.numeric(segsEN$CenterTime)[!naind],
+                 segsEN$Beaufort[!naind],
+                 as.numeric(segsEN$CenterTime)[naind], method="constant")$y
 
 # check plot
 #plot(segsEN$CenterTime[!naind], segsEN$Beaufort[!naind], pch=19)
 #points(as.numeric(segsEN$CenterTime)[naind], napred$y, pch=21)
+
+segsEN$Beaufort[naind] <- napred
 
 # now do the same for the GU segments
 gudat <- as.data.frame(read_sf(gdb_path, "GU_Trackline2"))
@@ -96,13 +109,18 @@ for(j in 1:nrow(segsGU)){
 
 # some were missing, interpolate
 naind <- is.na(segsGU$Beaufort)
-napred <- approx(as.numeric(segsGU$CenterTime)[!naind], segsGU$Beaufort[!naind],
-                 as.numeric(segsGU$CenterTime)[naind], method="constant")
+napred <- approx(as.numeric(segsGU$CenterTime)[!naind],
+                 segsGU$Beaufort[!naind],
+                 as.numeric(segsGU$CenterTime)[naind],
+                 method="constant")$y
+# last value doesn't get interpolated, so set to penultimate
+napred[length(napred)] <- napred[length(napred)-1]
 
 # check plot
 #plot(segsGU$CenterTime[!naind], segsGU$Beaufort[!naind], pch=19)
 #points(as.numeric(segsGU$CenterTime)[naind], napred$y, pch=21)
 
+segsGU$Beaufort[naind] <- napred
 
 # smoosh them back together again
 segs <- rbind(segsEN, segsGU)
@@ -120,6 +138,11 @@ write_sf(transects, dsn=paste0(export_path, "transects.shp"),
 
 # obs table
 obs <- read_sf(gdb_path, "Sightings")
+obs_latlong <- st_coordinates(obs)
+colnames(obs_latlong) <- c("long", "lat")
+
+obs_coords <- st_coordinates(st_transform(obs, crs=proj))
+colnames(obs_coords) <- c("x", "y")
 obs <- st_drop_geometry(obs)
 obs$distance <- obs$Distance
 obs$object <- obs$SightingID
@@ -130,6 +153,10 @@ obs$Beaufort <- obs$SeaState
 
 # get rid of nuisance columns
 obs$Distance <- obs$SightingID <- obs$SegmentID <- obs$GroupSize <- obs$SeaState <- NULL
+
+# attach lat/long and projected coords back on
+obs <- cbind(obs, obs_latlong, obs_coords)
+
 write.csv(obs, file=paste0(export_path, "obs.csv"), row.names=FALSE)
 
 # distance data
@@ -162,6 +189,10 @@ names(predictorStack) <- c("Depth","SST","NPP", "DistToCAS", "EKE")
 predgrid <- as.data.frame(predictorStack, xy=TRUE)
 # size of grid cells
 predgrid$off.set <- (10*1000)^2
+# add lat/long in
+predgrid_latlong <- st_coordinates(st_transform(predictorStack, crs=4326))
+colnames(predgrid_latlong) <- c("long", "lat")
+predgrid <- cbind(predgrid, predgrid_latlong)
 
 
 
@@ -184,6 +215,6 @@ predgrid <- predgrid[!is.na(predgrid$Depth), ]
 
 
 # now save some things for R
-dist <- obs
-save(segs, obs, dist, study_area, predgrid, file="R_import/spermwhale.RData")
+distdata <- obs
+save(segs, obs, distdata, proj, study_area, predgrid, file="R_import/spermwhale.RData")
 
